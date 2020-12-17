@@ -1,0 +1,3 @@
+[submodule "deps/winctl"]
+	path = deps/winctl
+	url = https://github.com/Tuniwutzi/winctl.git
