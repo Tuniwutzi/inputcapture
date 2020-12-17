@@ -1,3 +1,6 @@
 [submodule "deps/winctl"]
 	path = deps/winctl
 	url = https://github.com/Tuniwutzi/winctl.git
+[submodule "deps/json"]
+	path = deps/json
+	url = https://github.com/nlohmann/json.git
