@@ -2,6 +2,9 @@
 
 #include <nlohmann/json.hpp>
 
+#include <future>
+#include <filesystem>
+#include <fstream>
 #include <chrono>
 #include <iostream>
 #include <thread>
@@ -73,6 +76,12 @@ std::set<Input> getInputs(const DIJOYSTATE& state) {
     return rv;
 }
 
+std::string getConsoleInput() {
+    std::string line;
+    std::getline(std::cin, line);
+    return line;
+}
+
 int main(int argc, char** argv) {
     auto controllerIds = winctl::enumerateControllers();
 
@@ -86,14 +95,19 @@ int main(int argc, char** argv) {
     std::set<Input> lastInputs;
 
     using clock_t = std::chrono::steady_clock;
-    auto startTime = clock_t::now();
+    const auto startTime = clock_t::now();
 
-    while (true) {
-        int i = 0;
+    auto stdinFuture = std::async(getConsoleInput);
+    bool quit = false;
+
+    std::list<InputEvent> events;
+
+    while (!quit) {
+        const auto now = clock_t::now();
         for (auto& c : controllers) {
             try {
                 auto state = c.getState();
-                auto time = clock_t::now() - startTime;
+                auto time = now - startTime;
 
                 auto inputs = getInputs(state);
 
@@ -107,21 +121,33 @@ int main(int argc, char** argv) {
                         .time = std::chrono::duration_cast<std::chrono::milliseconds>(time)
                     };
 
-                    std::cout << event.operator nlohmann::json().dump(4) << std::endl << std::endl;
+                    events.push_back(std::move(event));
 
                     lastInputs = std::move(inputs);
                 }
-                
-                //std::cout << "X = " << state.lX << ", Y = " << state.lY << ", Z =" << state.lZ << std::endl;
-                //std::cout << "Buttons: " << toString(state.rgbButtons, sizeof(state.rgbButtons) / sizeof(state.rgbButtons[0])) << std::endl;
             } catch (const std::exception& ex) {
                 std::cout << "Error fetching state: " << ex.what() << std::endl << std::endl;
             }
         }
 
-        std::this_thread::sleep_for(std::chrono::milliseconds(500));
-        //std::this_thread::yield();
+        auto continueAt = now + std::chrono::milliseconds(10);
+        while (stdinFuture.wait_until(continueAt) != std::future_status::timeout) {
+            auto line = stdinFuture.get();
+            if (line == "q") {
+                quit = true;
+                break;
+            }
+            stdinFuture = std::async(getConsoleInput);
+        }
     }
+
+
+    std::stringstream filename;
+    filename << std::chrono::system_clock::to_time_t(std::chrono::system_clock::now()) << "_inputevents.json";
+    std::filesystem::path filepath(filename.str());
+    std::ofstream file(filepath, std::ios_base::trunc);
+    file << ((nlohmann::json)events).dump(4) << std::endl;
+    file.flush();
 
     return 0;
 }
