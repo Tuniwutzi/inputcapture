@@ -46,12 +46,12 @@ struct Input {
 };
 struct InputEvent {
     std::set<Input> inputs;
-    std::chrono::milliseconds time;
+    size_t frame;
 
     operator nlohmann::json() const {
         return {
             { "inputs", inputs },
-            { "timeMS", time.count() }
+            { "frame", frame }
         };
     }
 };
@@ -95,19 +95,20 @@ int main(int argc, char** argv) {
     std::set<Input> lastInputs;
 
     using clock_t = std::chrono::steady_clock;
-    const auto startTime = clock_t::now();
 
     auto stdinFuture = std::async(getConsoleInput);
     bool quit = false;
 
     std::list<InputEvent> events;
+    size_t frame = 0;
 
     while (!quit) {
         const auto now = clock_t::now();
+        frame++;
+
         for (auto& c : controllers) {
             try {
                 auto state = c.getState();
-                auto time = now - startTime;
 
                 auto inputs = getInputs(state);
 
@@ -118,7 +119,7 @@ int main(int argc, char** argv) {
                 if (!difference.empty()) {
                     InputEvent event {
                         .inputs = std::move(difference),
-                        .time = std::chrono::duration_cast<std::chrono::milliseconds>(time)
+                        .frame = frame
                     };
 
                     events.push_back(std::move(event));
@@ -129,7 +130,6 @@ int main(int argc, char** argv) {
                 std::cout << "Error fetching state: " << ex.what() << std::endl << std::endl;
             }
         }
-
         auto continueAt = now + std::chrono::milliseconds(10);
         while (stdinFuture.wait_until(continueAt) != std::future_status::timeout) {
             auto line = stdinFuture.get();
